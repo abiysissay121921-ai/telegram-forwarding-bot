@@ -11,7 +11,7 @@ print("=" * 50)
 # Get credentials from environment variables
 API_ID = int(os.getenv("API_ID", 37303512))
 API_HASH = os.getenv("API_HASH", "dff48ddff61546b05d1d507a6c508ee8")
-STRING_SESSION = os.getenv("STRING_SESSION")
+STRING_SESSION = "1BJWap1wBu6POmPkSoZKGclkM5ByE5N-lD76_DCiBu-1yFW96uu3z7fHMAm82_ZxnRlgY3eUlQXt7kEwrSsMyo_b4cghzRNoRaifH1BuOaVW-0XRpX-Wa27109uI7G0yBZo4_hAyNKm12AhNdV9kvI9nJ-1svwy21EsiFPYv3Ud4H1DOTAM4Z2ND4L2CUGk5c3_Hv8Na_6aMsUpFkyXtMWJuTuefzLbZs49EPE2R938EUaENgeF_N-Wa--r0KlPzR-kYlRSe2uTsTJ1whJyqnNg2f1KkxXtOWs3vFNku7FU376Zxv6bFe27MhZhgw2tEcK6kqLcGY_2NQAjJ1iwRfH_tB2KbQt1Y="
 
 if not STRING_SESSION:
     print("❌ STRING_SESSION environment variable not set!")
