@@ -3,9 +3,10 @@ from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 import os
 import re
+import hashlib
 
 print("=" * 50)
-print("🚀 TELEGRAM FORWARD BOT (StringSession)")
+print("🚀 TELEGRAM FORWARD BOT (Full Album + Dedup)")
 print("=" * 50)
 
 # Get credentials from environment variables
@@ -36,7 +37,8 @@ for ch in source_channels:
 print(f"🎯 Forwarding to: @{target_channel}")
 
 client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
-processed = set()
+processed = set()          # For deduplication of single messages
+processed_albums = set()   # For deduplication of albums (based on caption hash)
 
 def clean_text(text):
     if not text:
@@ -49,6 +51,13 @@ def clean_text(text):
     text = re.sub(r't\.me/\S+', '', text)
     text = re.sub(r'\n\s*\n', '\n\n', text)
     return text.strip()
+
+def get_text_hash(text):
+    """Generate a hash of the cleaned text for deduplication."""
+    cleaned = clean_text(text)
+    # Use first 200 chars as a fingerprint (good enough for dedup)
+    fingerprint = cleaned[:200] if cleaned else ""
+    return hashlib.md5(fingerprint.encode()).hexdigest()
 
 def split_message(text, max_len=4000):
     if len(text) <= max_len:
@@ -80,6 +89,7 @@ async def send_long(channel, message):
             await client.send_message(channel, chunk, parse_mode=None)
     return len(chunks)
 
+# ========== ALBUM HANDLER – Forwards ALL photos in the album ==========
 @client.on(events.Album)
 async def album_handler(event):
     try:
@@ -89,60 +99,100 @@ async def album_handler(event):
         grouped_id = event.grouped_id
         if not grouped_id:
             return
-        key = f"{chat.id}_group_{grouped_id}"
-        if key in processed:
-            return
-        processed.add(key)
-        if len(processed) > 1000:
-            processed.clear()
 
-        print(f"\n📸 Album detected from @{chat.username}")
-        first_media = None
+        # Collect all media and captions
+        media_list = []
         caption_parts = []
         for msg in event.messages:
+            if msg.media:
+                media_list.append(msg.media)
             if msg.raw_text:
                 caption_parts.append(msg.raw_text)
-            if msg.media and first_media is None:
-                first_media = msg.media
-        if not first_media:
+
+        if not media_list:
             print("⚠️ No media in album, skipping.")
             return
 
-        combined = "\n".join(caption_parts) if caption_parts else ""
-        cleaned = clean_text(combined)
+        # Combine captions and clean
+        combined_caption = "\n".join(caption_parts) if caption_parts else ""
+        cleaned = clean_text(combined_caption)
+        
+        # DEDUPLICATION: Check if we've seen this content before
+        caption_hash = get_text_hash(combined_caption)
+        album_key = f"{chat.id}_album_{caption_hash}"
+        
+        if album_key in processed_albums:
+            print(f"⏩ Skipping duplicate album from @{chat.username} (content already forwarded)")
+            return
+        
+        # Mark as processed
+        processed_albums.add(album_key)
+        if len(processed_albums) > 1000:
+            processed_albums.clear()
+
+        # Also mark individual message IDs to prevent double processing
+        for msg in event.messages:
+            msg_key = f"{chat.id}_{msg.id}"
+            processed.add(msg_key)
+
         full = create_full_message(cleaned)
 
+        print(f"\n📸 Album detected from @{chat.username} ({len(media_list)} media items)")
+        print(f"   Caption length: {len(full)} characters")
+
+        # Send ALL media as a single album with the caption attached
         await client.send_file(
             target_channel,
-            first_media,
+            media_list,
             caption=full,
-            parse_mode=None
+            parse_mode=None,
+            album=True  # This preserves the album grouping!
         )
-        total = len([m for m in event.messages if m.media])
-        print(f"✅ Album: sent FIRST media (1 of {total}) with caption length {len(full)}")
+        print(f"✅ Album forwarded: {len(media_list)} media items with caption")
+
     except Exception as e:
         print(f"❌ Album handler error: {e}")
         import traceback
         traceback.print_exc()
 
+# ========== SINGLE MESSAGE HANDLER ==========
 @client.on(events.NewMessage)
 async def handler(event):
     try:
+        # Skip messages that belong to an album (handled above)
         if event.message.grouped_id is not None:
             return
+
         chat = await event.get_chat()
         if not chat.username or chat.username not in source_channels:
             return
+
         msg_id = f"{chat.id}_{event.id}"
         if msg_id in processed:
             return
+
+        print(f"\n📨 From @{chat.username} (single message)")
+
+        original = event.raw_text or ""
+        cleaned = clean_text(original)
+
+        # DEDUPLICATION: Check if we've seen this content before
+        caption_hash = get_text_hash(original)
+        if caption_hash:
+            # For text-only or single media with caption, check for duplicates
+            # We'll use a separate check for single messages
+            single_key = f"{chat.id}_single_{caption_hash}"
+            if single_key in processed_albums:
+                print(f"⏩ Skipping duplicate single message from @{chat.username}")
+                return
+            processed_albums.add(single_key)
+            if len(processed_albums) > 1000:
+                processed_albums.clear()
+
         processed.add(msg_id)
         if len(processed) > 1000:
             processed.clear()
 
-        print(f"\n📨 From @{chat.username} (single message)")
-        original = event.raw_text or ""
-        cleaned = clean_text(original)
         full = create_full_message(cleaned)
 
         if event.message.media:
@@ -155,8 +205,10 @@ async def handler(event):
             )
             print("✅ Single media sent with caption")
         else:
+            # Text-only – split if needed
             parts = await send_long(target_channel, full)
             print(f"✅ Done – {parts} parts sent")
+
     except Exception as e:
         print(f"❌ Error in handler: {e}")
         import traceback
