@@ -24,7 +24,6 @@ source_channels = [
     "TikvahUniversity",
     "abiyselol",
     "zena24now",
-    "seledadotio",
 ]
 target_channel = "EBC_News_Official"
 your_link = "https://t.me/EBC_News_Official"
