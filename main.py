@@ -20,7 +20,6 @@ if not STRING_SESSION:
     exit(1)
 
 source_channels = [
-    "ayuzehabeshanews",
     "TikvahUniversity",
     "abiyselol",
     "zena24now",
