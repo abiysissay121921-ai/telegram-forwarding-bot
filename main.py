@@ -21,7 +21,7 @@ if not STRING_SESSION:
 
 source_channels = [
     "TikvahUniversity",
-    "Radarr_News",
+    "seledadotio",
     "abiyselol",
     "zena24now",
 ]
