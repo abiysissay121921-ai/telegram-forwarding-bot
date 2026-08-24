@@ -41,11 +41,17 @@ def clean_text(text):
     if not text:
         return ""
     for ch in source_channels:
-        text = re.sub(rf'@{ch}\b', '', text, flags=re.IGNORECASE)
-        text = re.sub(rf'https?://t\.me/{ch}\b', '', text, flags=re.IGNORECASE)
-        text = re.sub(rf't\.me/{ch}\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'https?://t\.me/\S+', '', text)
-    text = re.sub(r't\.me/\S+', '', text)
+        esc = re.escape(ch)
+        # @mentions
+        text = re.sub(rf'@{esc}\b', '', text, flags=re.IGNORECASE)
+        # t.me / telegram.me links, with or without protocol, with optional /message_id
+        text = re.sub(rf'(https?://)?(t\.me|telegram\.me)/{esc}(/\d+)?\b', '', text, flags=re.IGNORECASE)
+        # tg://resolve?domain=channel links
+        text = re.sub(rf'tg://resolve\?domain={esc}\S*', '', text, flags=re.IGNORECASE)
+    # Safety net: strip any remaining telegram links (any channel), same as before
+    text = re.sub(r'(https?://)?(t\.me|telegram\.me)/\S+', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'tg://resolve\?domain=\S+', '', text, flags=re.IGNORECASE)
+    # Collapse leftover blank lines
     text = re.sub(r'\n\s*\n', '\n\n', text)
     return text.strip()
 
