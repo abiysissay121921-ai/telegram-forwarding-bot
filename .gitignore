@@ -1,4 +1,18 @@
+# Telegram session files — these are equivalent to login credentials
 *.session
 *.session-journal
+
+# Environment variables / secrets
+.env
+.env.*
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+.venv/
+venv/
+
+# Editor/OS cruft
+.vscode/
+.DS_Store
