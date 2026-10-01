@@ -9,15 +9,21 @@ print("=" * 50)
 print("🚀 TELEGRAM FORWARD BOT (Full Album + Dedup)")
 print("=" * 50)
 
-# Get credentials from environment variables
-API_ID = int(os.getenv("API_ID", 37303512))
-API_HASH = os.getenv("API_HASH", "dff48ddff61546b05d1d507a6c508ee8")
-STRING_SESSION = "1BJWap1wBu6POmPkSoZKGclkM5ByE5N-lD76_DCiBu-1yFW96uu3z7fHMAm82_ZxnRlgY3eUlQXt7kEwrSsMyo_b4cghzRNoRaifH1BuOaVW-0XRpX-Wa27109uI7G0yBZo4_hAyNKm12AhNdV9kvI9nJ-1svwy21EsiFPYv3Ud4H1DOTAM4Z2ND4L2CUGk5c3_Hv8Na_6aMsUpFkyXtMWJuTuefzLbZs49EPE2R938EUaENgeF_N-Wa--r0KlPzR-kYlRSe2uTsTJ1whJyqnNg2f1KkxXtOWs3vFNku7FU376Zxv6bFe27MhZhgw2tEcK6kqLcGY_2NQAjJ1iwRfH_tB2KbQt1Y="
+# ---------------------------------------------------------------
+# Credentials — environment variables ONLY. Set these in Railway's
+# Variables tab. Do not hardcode secrets here or commit them to git.
+# ---------------------------------------------------------------
+API_ID = os.getenv("API_ID")
+API_HASH = os.getenv("API_HASH")
+STRING_SESSION = os.getenv("STRING_SESSION")
 
-if not STRING_SESSION:
-    print("❌ STRING_SESSION environment variable not set!")
-    print("Please add it in Railway Variables")
+missing = [name for name, val in [("API_ID", API_ID), ("API_HASH", API_HASH), ("STRING_SESSION", STRING_SESSION)] if not val]
+if missing:
+    print(f"❌ Missing required environment variable(s): {', '.join(missing)}")
+    print("Set them in Railway → Variables, then redeploy.")
     exit(1)
+
+API_ID = int(API_ID)
 
 source_channels = [
     "TikvahUniversity",
@@ -88,16 +94,22 @@ async def send_long(channel, message):
             await client.send_message(channel, chunk, reply_to=first.id, parse_mode=None)
             print(f"📤 Part {i}/{len(chunks)} sent")
             await asyncio.sleep(0.3)
-        except:
+        except Exception:
             await client.send_message(channel, chunk, parse_mode=None)
     return len(chunks)
+
+def get_source_username(chat):
+    """Safely pull a username off a resolved chat object, or None."""
+    username = getattr(chat, "username", None)
+    return username
 
 # ========== ALBUM HANDLER – Forwards ALL photos in the album ==========
 @client.on(events.Album)
 async def album_handler(event):
     try:
         chat = await event.get_chat()
-        if not chat.username or chat.username not in source_channels:
+        username = get_source_username(chat)
+        if not username or username not in source_channels:
             return
         grouped_id = event.grouped_id
         if not grouped_id:
@@ -119,15 +131,15 @@ async def album_handler(event):
         # Combine captions and clean
         combined_caption = "\n".join(caption_parts) if caption_parts else ""
         cleaned = clean_text(combined_caption)
-        
+
         # DEDUPLICATION: Check if we've seen this content before
         caption_hash = get_text_hash(combined_caption)
         album_key = f"{chat.id}_album_{caption_hash}"
-        
+
         if album_key in processed_albums:
-            print(f"⏩ Skipping duplicate album from @{chat.username} (content already forwarded)")
+            print(f"⏩ Skipping duplicate album from @{username} (content already forwarded)")
             return
-        
+
         # Mark as processed
         processed_albums.add(album_key)
         if len(processed_albums) > 1000:
@@ -140,7 +152,7 @@ async def album_handler(event):
 
         full = create_full_message(cleaned)
 
-        print(f"\n📸 Album detected from @{chat.username} ({len(media_list)} media items)")
+        print(f"\n📸 Album detected from @{username} ({len(media_list)} media items)")
         print(f"   Caption length: {len(full)} characters")
 
         # Send ALL media as a single album with the caption attached
@@ -154,6 +166,8 @@ async def album_handler(event):
         print(f"✅ Album forwarded: {len(media_list)} media items with caption")
 
     except Exception as e:
+        # Catches everything, including Telethon TypeNotFoundError from
+        # unrecognized TL objects — logs it and moves on without crashing.
         print(f"❌ Album handler error: {e}")
         import traceback
         traceback.print_exc()
@@ -167,14 +181,15 @@ async def handler(event):
             return
 
         chat = await event.get_chat()
-        if not chat.username or chat.username not in source_channels:
+        username = get_source_username(chat)
+        if not username or username not in source_channels:
             return
 
         msg_id = f"{chat.id}_{event.id}"
         if msg_id in processed:
             return
 
-        print(f"\n📨 From @{chat.username} (single message)")
+        print(f"\n📨 From @{username} (single message)")
 
         original = event.raw_text or ""
         cleaned = clean_text(original)
@@ -182,11 +197,9 @@ async def handler(event):
         # DEDUPLICATION: Check if we've seen this content before
         caption_hash = get_text_hash(original)
         if caption_hash:
-            # For text-only or single media with caption, check for duplicates
-            # We'll use a separate check for single messages
             single_key = f"{chat.id}_single_{caption_hash}"
             if single_key in processed_albums:
-                print(f"⏩ Skipping duplicate single message from @{chat.username}")
+                print(f"⏩ Skipping duplicate single message from @{username}")
                 return
             processed_albums.add(single_key)
             if len(processed_albums) > 1000:
@@ -213,6 +226,8 @@ async def handler(event):
             print(f"✅ Done – {parts} parts sent")
 
     except Exception as e:
+        # Catches everything, including Telethon TypeNotFoundError from
+        # unrecognized TL objects — logs it and moves on without crashing.
         print(f"❌ Error in handler: {e}")
         import traceback
         traceback.print_exc()
