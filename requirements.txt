@@ -1,1 +1,4 @@
-telethon
+telethon>=1.45.0
+pyaes
+rsa
+pyasn1>=0.1.3
